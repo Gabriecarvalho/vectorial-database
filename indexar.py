@@ -1,0 +1,100 @@
+import ollama
+import psycopg2
+import glob
+import os
+import pymupdf4llm
+from psycopg2.extras import execute_batch
+from langchain_core.documents import Document
+from langchain_text_splitters import MarkdownTextSplitter
+
+# 1. Conexão com o PostgreSQL (pgvector)
+conn = psycopg2.connect(
+    dbname="rag_database",
+    user="admin",
+    password="adminpassword",
+    host="localhost",
+    port="5433" # Confirme se está usando 5433
+)
+cursor = conn.cursor()
+
+# 2. Carregar os PDFs do EverySpec
+pasta_documentos = "documentos_teste"
+arquivos_pdf = glob.glob(os.path.join(pasta_documentos, "*.pdf"))
+
+if not arquivos_pdf:
+    print(f"Nenhum PDF encontrado na pasta '{pasta_documentos}'.")
+else:
+    total_documentos_salvos = 0
+
+    for pdf_path in arquivos_pdf:
+        print(f"\n--- Processando (Markdown): {pdf_path} ---")
+        
+        # Extrai o PDF já em formato Markdown, mantendo tabelas, separado por páginas
+        md_pages = pymupdf4llm.to_markdown(pdf_path, page_chunks=True)
+        
+        # Converte o resultado para o formato Document do LangChain
+        documents = []
+        for p in md_pages:
+            documents.append(Document(
+                page_content=p['text'],
+                metadata={'page': p['metadata'].get('page', 0)}
+            ))
+
+        # 3. Aplicar o chunking específico para Markdown
+        # Ele prioriza não cortar no meio de tabelas ou entre um título (#) e seu parágrafo
+        text_splitter = MarkdownTextSplitter(
+            chunk_size=900,
+            chunk_overlap=150
+        )
+        chunks = text_splitter.split_documents(documents)
+        print(f"Total de {len(chunks)} chunks Markdown para processar.")
+
+        # 4. Vetorizar e preparar os dados para inserção
+        dados_para_inserir = []
+        nome_arquivo_curto = os.path.basename(pdf_path)
+
+        for idx, chunk in enumerate(chunks):
+            texto = chunk.page_content.strip()
+            texto = texto.replace('\x00', '')
+            
+            if not texto:
+                continue
+
+            # Página do PDF (soma 1 pois o índice começa em 0)
+            pagina = chunk.metadata.get("page", 0) + 1
+            
+            # INJEÇÃO DE METADADOS: Garante que o LLM ache o arquivo pelo nome
+            texto_enriquecido = f"Documento: {nome_arquivo_curto}.\n{texto}"
+            
+            # Gera o embedding usando o texto enriquecido
+            resposta = ollama.embeddings(
+                model="nomic-embed-text",
+                prompt=texto_enriquecido
+            )
+            vetor = resposta["embedding"]
+
+            dados_para_inserir.append((
+                nome_arquivo_curto,
+                pagina,
+                texto_enriquecido, # Salvamos o texto em Markdown no banco para o LLM ler as tabelas depois
+                vetor
+            ))
+
+            if (idx + 1) % 50 == 0 or (idx + 1) == len(chunks):
+                print(f"  Vetorizados {idx + 1}/{len(chunks)} blocos...")
+
+        # 5. Salvar em lote no PostgreSQL
+        if dados_para_inserir:
+            query_sql = """
+                INSERT INTO documentos_especificacoes (nome_documento, pagina, conteudo, embedding)
+                VALUES (%s, %s, %s, %s::vector);
+            """
+            print(f"  Salvando {len(dados_para_inserir)} blocos no banco...")
+            execute_batch(cursor, query_sql, dados_para_inserir)
+            conn.commit()
+            total_documentos_salvos += 1
+            print(f"  [{pdf_path}] concluído.")
+        
+    cursor.close()
+    conn.close()
+    print(f"\n✅ Processamento finalizado! {total_documentos_salvos} PDF(s) indexado(s) em Markdown com sucesso.")
