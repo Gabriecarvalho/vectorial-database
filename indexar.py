@@ -65,20 +65,24 @@ else:
 
             pagina = chunk.metadata.get("page_number", 1)
             
-            # INJEÇÃO DE METADADOS: Garante que o LLM ache o arquivo pelo nome
+# INJEÇÃO DE METADADOS: Garante que o LLM ache o arquivo pelo nome
             texto_enriquecido = f"Documento: {nome_arquivo_curto}.\n{texto}"
             
-            # Gera o embedding usando o texto enriquecido
+            # 1. ADICIONADO: Criamos uma string específica para o embedding com o prefixo
+            texto_para_vetorizar = f"search_document: {texto_enriquecido}"
+            
+            # 2. ALTERADO: Geramos o vetor usando a string COM o prefixo
             resposta = ollama.embeddings(
                 model="nomic-embed-text",
-                prompt=texto_enriquecido
+                prompt=texto_para_vetorizar
             )
             vetor = resposta["embedding"]
 
+            # 3. MANTIDO: Salvamos no banco o 'texto_enriquecido' original, SEM o prefixo, para não sujar a leitura
             dados_para_inserir.append((
                 nome_arquivo_curto,
                 pagina,
-                texto_enriquecido, # Salvamos o texto em Markdown no banco para o LLM ler as tabelas depois
+                texto_enriquecido, 
                 vetor
             ))
 

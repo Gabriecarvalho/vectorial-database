@@ -14,10 +14,15 @@ NUM_RESULTADOS = 5
 
 
 def buscar_trechos(pergunta, cursor, limite=NUM_RESULTADOS):
+    # 1. ADICIONADO: Inserimos o prefixo obrigatório para perguntas
+    pergunta_formatada = f"search_query: {pergunta}"
+
+    # 2. ALTERADO: Usamos a pergunta_formatada em vez da pergunta original
     resposta = ollama.embeddings(
         model=EMBEDDING_MODEL,
-        prompt=pergunta,
+        prompt=pergunta_formatada, 
     )
+    
     vetor_pergunta = resposta["embedding"]
     vetor_pgvector = "[" + ",".join(str(valor) for valor in vetor_pergunta) + "]"
 
