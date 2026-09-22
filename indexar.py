@@ -17,6 +17,9 @@ conn = psycopg2.connect(
 )
 cursor = conn.cursor()
 
+cursor.execute("TRUNCATE TABLE documentos_especificacoes RESTART IDENTITY;")
+conn.commit()
+
 # 2. Carregar os PDFs do EverySpec
 pasta_documentos = "documentos_teste"
 arquivos_pdf = glob.glob(os.path.join(pasta_documentos, "*.pdf"))
@@ -37,7 +40,7 @@ else:
         for p in md_pages:
             documents.append(Document(
                 page_content=p['text'],
-                metadata={'page': p['metadata'].get('page', 0)}
+                metadata={'page_number': p['metadata'].get('page_number', 1)}
             ))
 
         # 3. Aplicar o chunking específico para Markdown
@@ -60,8 +63,7 @@ else:
             if not texto:
                 continue
 
-            # Página do PDF (soma 1 pois o índice começa em 0)
-            pagina = chunk.metadata.get("page", 0) + 1
+            pagina = chunk.metadata.get("page_number", 1)
             
             # INJEÇÃO DE METADADOS: Garante que o LLM ache o arquivo pelo nome
             texto_enriquecido = f"Documento: {nome_arquivo_curto}.\n{texto}"
