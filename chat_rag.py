@@ -9,9 +9,8 @@ DB_CONFIG = {
     "port": "5433",
 }
 
-EMBEDDING_MODEL = "nomic-embed-text"
+EMBEDDING_MODEL = "nomic-embed-text-v2-moe"
 NUM_RESULTADOS = 5
-
 
 def buscar_trechos(pergunta, cursor, limite=NUM_RESULTADOS):
     # 1. ADICIONADO: Inserimos o prefixo obrigatório para perguntas
@@ -38,37 +37,51 @@ def buscar_trechos(pergunta, cursor, limite=NUM_RESULTADOS):
     )
     return cursor.fetchall()
 
-
 def main():
-    print("Busca de documentos iniciada. Digite 'sair' para encerrar.\n")
+    perguntas_teste = [
+        # --- TESTE CROSS-LINGUAL (Perguntas em PT-BR para base em EN) ---
+        "Qual é a altitude padrão para entrada no circuito de tráfego VFR para aeronaves pesadas?",
+        "É permitido usar epóxi ou massa automotiva para consertar amassados nas pás das hélices de metal?",
+        "O que significa a seta para cima (Up Arrow) em uma solicitação de trabalho no sistema de manutenção?",
+        "Quem tem a responsabilidade de atribuir os números aos documentos de controle no nível do Programa?",
+        
+        # --- TESTE LINHA DE BASE (Perguntas em EN para base em EN) ---
+        "What is the standard altitude for entering the VFR traffic pattern for heavy aircraft?",
+        "Is it permitted to use epoxy or auto filler to repair dents on metal propeller blades?",
+        "What does the up arrow mean on a work request in the maintenance system?",
+        "Who is responsible for assigning control document numbers at the Program level?"
+    ]
+
+    print(f"Iniciando calibração de limites de distância com {EMBEDDING_MODEL}...\n")
 
     try:
         with psycopg2.connect(**DB_CONFIG) as conn:
             with conn.cursor() as cursor:
-                while True:
-                    pergunta = input("Pergunta: ").strip()
-                    if pergunta.lower() in {"sair", "exit", "quit"}:
-                        break
-                    if not pergunta:
-                        continue
-
+                for pergunta in perguntas_teste:
+                    print("-" * 80)
+                    print(f"PERGUNTA: '{pergunta}'")
+                    
                     resultados = buscar_trechos(pergunta, cursor)
+                    
                     if not resultados:
-                        print("\nNenhum documento foi encontrado. Rode a indexação primeiro.\n")
+                        print("  Nenhum documento foi encontrado. Rode a indexação primeiro.\n")
                         continue
 
-                    print("\nDocumentos e páginas mais prováveis:")
-                    for indice, (_, nome_documento, pagina, _, distancia) in enumerate(resultados, 1):
+                    print("  TOP RESULTADOS:")
+                    for indice, (_, nome_documento, pagina, conteudo, distancia) in enumerate(resultados, 1):
+                        # Preview do texto para validar se é o trecho exato ou alucinação
+                        conteudo_preview = conteudo.replace('\n', ' ').strip()[:100]
+                        
                         print(
-                            f"  [{indice}] {nome_documento} - página {pagina} "
-                            f"(distância: {distancia:.4f})"
+                            f"  [{indice}] Distância: {distancia:.4f} | Arquivo: {nome_documento} (Pág {pagina})\n"
+                            f"      Texto: {conteudo_preview}...\n"
                         )
                     print()
+                    
     except KeyboardInterrupt:
-        print("\nChat encerrado.")
+        print("\nTeste encerrado.")
     except Exception as erro:
-        print(f"\nErro ao executar o chat: {erro}")
-
+        print(f"\nErro ao executar o teste: {erro}")
 
 if __name__ == "__main__":
     main()

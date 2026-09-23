@@ -2,10 +2,20 @@ import ollama
 import psycopg2
 import glob
 import os
+import re
 import pymupdf4llm
 from psycopg2.extras import execute_batch
 from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownTextSplitter
+
+
+EMBEDDING_MODEL = "nomic-embed-text-v2-moe"
+
+
+def remover_marca_everyspec(texto):
+    marca = r"(?im)^\s*.*Downloaded\s+from.*everyspec\.com.*(?:\r?\n|$)"
+    texto = re.sub(marca, "", texto)
+    return re.sub(r"\n\s*\n\s*\n+", "\n\n", texto)
 
 # 1. Conexão com o PostgreSQL (pgvector)
 conn = psycopg2.connect(
@@ -38,16 +48,17 @@ else:
         # Converte o resultado para o formato Document do LangChain
         documents = []
         for p in md_pages:
+            texto_limpo = remover_marca_everyspec(p['text'])
             documents.append(Document(
-                page_content=p['text'],
+                page_content=texto_limpo,
                 metadata={'page_number': p['metadata'].get('page_number', 1)}
             ))
 
         # 3. Aplicar o chunking específico para Markdown
         # Ele prioriza não cortar no meio de tabelas ou entre um título (#) e seu parágrafo
         text_splitter = MarkdownTextSplitter(
-            chunk_size=900,
-            chunk_overlap=150
+            chunk_size=700,
+            chunk_overlap=100
         )
         chunks = text_splitter.split_documents(documents)
         print(f"Total de {len(chunks)} chunks Markdown para processar.")
@@ -73,7 +84,7 @@ else:
             
             # 2. ALTERADO: Geramos o vetor usando a string COM o prefixo
             resposta = ollama.embeddings(
-                model="nomic-embed-text",
+                model=EMBEDDING_MODEL,
                 prompt=texto_para_vetorizar
             )
             vetor = resposta["embedding"]

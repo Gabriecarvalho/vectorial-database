@@ -30,11 +30,11 @@ Para suportar o motor de IA sem quebrar a estrutura existente do sistema, a arqu
 ## 🤖 Modelos de Inteligência Artificial (Ollama)
 Todo o processamento de linguagem natural ocorre localmente através do **Ollama**. É necessário baixar dois modelos distintos para o pipeline funcionar:
 
-1. **Modelo de Embedding (`nomic-embed-text`):** Responsável por ler os blocos de texto e transformá-los em vetores matemáticos de 768 dimensões.
+1. **Modelo de Embedding (`nomic-embed-text-v2-moe`):** Modelo multilíngue MoE que transforma os blocos em vetores de 768 dimensões. Ele aceita no máximo 512 tokens; por isso a indexação usa chunks de 700 caracteres com sobreposição de 100 caracteres. Os prefixos `search_document:` e `search_query:` são usados conforme recomendado pelo modelo.
 2. **Modelo de Geração (`qwen2.5:7b`):** Responsável por ler a pergunta do usuário, analisar os blocos recuperados do banco e redigir a resposta final formatada.
 
 **Comandos para baixar os modelos no terminal:**
-`ollama pull nomic-embed-text`
+`ollama pull nomic-embed-text-v2-moe`
 `ollama pull qwen2.5:7b`
 
 *(Certifique-se de que o aplicativo do Ollama esteja rodando em background no seu computador antes de executar os comandos).*
